@@ -10,12 +10,18 @@
 #	It also assumes that there are only files from one session on the target directory.
 #
 
-#set -x
+DEBUG=no
+if [ "X$1" == "X-x" ]
+then
+	set -x
+	DEBUG=yes
+	shift
+fi
 
 # Check that at least one argument is passed and that it is a directory
 if [ $# -lt 1 -o ! -d "$1" ]
 then
-	echo "USAGE: $0 dir [output]" >&1
+	echo "USAGE: [-x] $0 dir [output]" >&1
 	exit 1
 fi
 
@@ -34,6 +40,7 @@ CNT=`echo $FILES | wc -w`
 # Calculate time differences in the same loop
 i=0
 BASEts=0
+ENDts=0
 dt="unknown"
 DIFF=0
 TMPFILE=`mktemp`
@@ -47,16 +54,21 @@ do
 	else
 		/bin/cp $FILE-video.webm $FILE-video-combined.webm
 	fi
-	ts=`echo $FILE | cut -f5 -d-`
+	start_ts=`echo $FILE | cut -f5 -d-`
+	dur=`ffmpeg -i $FILE-video.webm /dev/null 2>&1 | fgrep Duration | cut -d" " -f4- | cut -d, -f1`
+	dur=`date +%s%N -d "1970-01-01 $dur UTC"`
+	end_ts=$(($start_ts + $dur/1000))
 
+	# Absolute start and end of call
 	if [ $BASEts = 0 ]
 	then
-		BASEts=$ts
+		BASEts=$start_ts
 		tmp=`echo $BASEts | cut -c1-10`
 		dt=`date -d @$tmp "+%Y%m%d%H%M%S"`
 	fi
+	[ $end_ts -gt $ENDts ] && ENDts=$end_ts
 
-	DIFF=$(($ts-$BASEts))
+	DIFF=$(($start_ts-$BASEts))
 	DIFFms=`echo "scale=0;$DIFF/1000" | bc`
 	DIFFs=`echo "scale=4;$DIFF/1000000" | bc`
 
@@ -65,11 +77,19 @@ do
 	echo "DIFF$i=$DIFF" >> $TMPFILE
 	echo "DIFFs$i=$DIFFs" >> $TMPFILE
 	echo "DIFFms$i=$DIFFms" >> $TMPFILE
+	echo "start_ts$i=$start_ts" >> $TMPFILE
+	echo "end_ts$i=$end_ts" >> $TMPFILE
 
 	i=$(($i+1))
 done
+TMP=$(($ENDts - $BASEts))
+DURms=$(($TMP / 1000))
+DURs=$((DURms / 1000 + 1))
+echo "DURms=$DURms" >> $TMPFILE
+echo "DURs=$DURs" >> $TMPFILE
 
 # Set variables saved to file during loop
+[ $DEBUG == "yes" ] && cat $TMPFILE
 source $TMPFILE; /bin/rm -f $TMPFILE
 
 # Name of output file
@@ -82,7 +102,12 @@ fi
 
 
 # Now construct a command to create the combined video
-if [ $CNT -eq 2 ] # Only 2 videos
+if [ $CNT -eq 1 ] # Only 1 video
+then
+	/bin/mv $FILE0 $OUT
+fi
+
+if [ $CNT -eq 2 ] # 2 videos
 then
 	ffmpeg -i $FILE0 -i $FILE1 -filter_complex \
        "[0]pad=2*iw:ih[l];[1]setpts=PTS-STARTPTS+$DIFFs1/TB[1v]; [l][1v]overlay=x=W/2[v]; \
