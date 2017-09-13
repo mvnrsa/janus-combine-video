@@ -84,7 +84,7 @@ do
 done
 TMP=$(($ENDts - $BASEts))
 DURms=$(($TMP / 1000))
-DURs=$((DURms / 1000 + 1))
+DURs=$(($DURms / 1000 + 1))
 echo "DURms=$DURms" >> $TMPFILE
 echo "DURs=$DURs" >> $TMPFILE
 
@@ -139,6 +139,6 @@ then
 fi
 
 # Clean up
-/bin/mv $OUT $OUT.protect	#safety net in case name matched below
+/bin/mv $OUT $OUT.protect	#safety net in case name matches below
 /bin/rm -f *combined.webm *video.webm *.opus
 /bin/mv $OUT.protect $OUT
